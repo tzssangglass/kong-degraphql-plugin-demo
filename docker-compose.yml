@@ -1,0 +1,80 @@
+services:
+  graphql-server:
+    container_name: graphql-server
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    
+  kong-migrations:
+    image: kong/kong-gateway:3.8.0.0
+    container_name: kong-migrations
+    command: "kong migrations bootstrap"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PASSWORD: password
+      KONG_LICENSE_DATA: ${KONG_LICENSE_DATA}    
+    restart: on-failure
+
+
+  postgres:
+    image: postgres:13.1
+    container_name: postgres
+    environment:
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: kong
+      POSTGRES_USER: kong
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: on-failure
+    stdin_open: true
+    tty: true
+    ports:
+      - 5432:5432/tcp
+
+
+  kong:
+    image: kong/kong-gateway:3.8.0.0
+    container_name: kong
+    command: ["sh", "-c", "kong migrations up && kong migrations finish && kong start"]
+    user: "${KONG_USER:-kong}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KONG_LICENSE_DATA: ${KONG_LICENSE_DATA}
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_NGINX_WORKER_PROCESSES: 2
+      KONG_ANONYMOUS_REPORTS: "off"
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+    ports:
+      - "8001:8001/tcp"
+      - "8000:8000/tcp"
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: on-failure
