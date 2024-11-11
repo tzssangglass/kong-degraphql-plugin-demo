@@ -9,5 +9,6 @@ docker-compose up --build -d
 ## Test the degrahql plugin
 
 ```bash
-
+chmod +x test.sh
+./test.sh
 ```
